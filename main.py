@@ -5,73 +5,70 @@ from urllib.parse import urljoin
 import pandas as pd
 import re
 
-st.set_page_config(page_title="링크 분석기", layout="wide")
-st.title("🔗 링크 추출 + 미리보기")
+st.set_page_config(page_title="📊 테이블 파서", layout="wide")
+st.title("📋 HTML Table 파싱 + 링크 추출 & 미리보기")
 
-url = st.text_input("📥 분석할 웹페이지 주소:")
-tag = st.selectbox("🔖 분석할 태그 선택", ['a'])
+url = st.text_input("🔗 분석할 웹사이트 주소를 입력하세요")
 
-# 링크 템플릿
+# 변환할 링크 템플릿
 LINK_TEMPLATE = (
     "https://www.seti.go.kr/common/bbs/management/selectCmmnBBSMgmtView.do"
     "?menuId=1000002747&pageIndex=1&bbscttId={}&bbsId=BBSMSTR_000000001070"
     "&searchKey=&searchWord=&etc=&searchKeyTxt=1&searchWordTxt=&perPage=10"
 )
 
-if url and st.button("🔍 파싱 시작"):
+if url and st.button("🔍 테이블 파싱 시작"):
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        res = requests.get(url)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        a_tags = soup.find_all("a")
-        st.success(f"🔗 a 태그 {len(a_tags)}개 발견")
+        tables = soup.find_all("table")
+        st.success(f"✅ 총 {len(tables)}개의 `<table>` 태그가 발견되었습니다.")
 
-        for idx, a in enumerate(a_tags):
-            href = a.get("href", "")
-            span = a.find("span")
-            text = span.get_text(strip=True) if span else a.get_text(strip=True)
-            if not text:
-                text = "(텍스트 없음)"
+        for table_idx, table in enumerate(tables):
+            st.markdown(f"---\n## 📦 테이블 {table_idx + 1}")
 
-            # 숫자 10자리 추출
-            match = re.search(r"\d{10}", href)
-            if match:
-                bbsctt_id = match.group()
-                converted_url = LINK_TEMPLATE.format(bbsctt_id)
-            else:
-                converted_url = None
+            rows = table.find_all("tr")
+            for row_idx, row in enumerate(rows):
+                cols = row.find_all(["td", "th"])
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.markdown(f"### ▶️ Row {row_idx + 1}")
+                    for col_idx, col in enumerate(cols):
+                        st.markdown(f"- 셀 {col_idx + 1}:")
+                        a = col.find("a")
+                        span = a.find("span") if a else None
+                        href = a.get("href", "") if a else None
+                        text = span.get_text(strip=True) if span else col.get_text(strip=True)
 
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.markdown(f"**{text}**")
-                if converted_url:
-                    st.text(f"{converted_url}")
-                    if st.button(f"🔎 링크 확인 {idx+1}", key=f"preview_{idx}"):
-                        st.session_state[f"preview_link_{idx}"] = converted_url
-                else:
-                    st.warning("❌ 숫자 10자리(bbscttId) 없음")
+                        # 링크 변환 처리
+                        if href and re.search(r"\d{10}", href):
+                            bbsctt_id = re.search(r"\d{10}", href).group()
+                            converted_url = LINK_TEMPLATE.format(bbsctt_id)
+                            st.text(f"📝 텍스트: {text}")
+                            st.text(f"🔗 변환 링크: {converted_url}")
+                            if st.button(f"🔎 링크 확인 - {table_idx}-{row_idx}-{col_idx}", key=f"preview_{table_idx}_{row_idx}_{col_idx}"):
+                                st.session_state["preview_url"] = converted_url
+                        else:
+                            st.text(f"📝 텍스트: {text}")
 
-            with col2:
-                if f"preview_link_{idx}" in st.session_state:
-                    preview_url = st.session_state[f"preview_link_{idx}"]
-                    st.info(f"🔗 미리보기: {preview_url}")
-                    try:
-                        preview_resp = requests.get(preview_url)
-                        preview_resp.raise_for_status()
-                        preview_soup = BeautifulSoup(preview_resp.text, "html.parser")
-
-                        # 예시: 페이지의 제목을 표시
-                        title_tag = preview_soup.find("h1") or preview_soup.find("title")
-                        preview_text = title_tag.get_text(strip=True) if title_tag else "(제목 없음)"
-                        st.markdown(f"**📝 페이지 제목:** {preview_text}")
-
-                        # 일부 텍스트 내용 예시 표시
-                        first_p = preview_soup.find("p")
-                        if first_p:
-                            st.text(f"본문 예시: {first_p.get_text(strip=True)}")
-                    except Exception as e:
-                        st.error(f"❌ 미리보기 불가: {e}")
+                with col2:
+                    key = "preview_url"
+                    if key in st.session_state:
+                        preview_url = st.session_state[key]
+                        st.info(f"🔗 미리보기: {preview_url}")
+                        try:
+                            preview_res = requests.get(preview_url)
+                            preview_soup = BeautifulSoup(preview_res.text, "html.parser")
+                            title = preview_soup.find("h1") or preview_soup.find("title")
+                            preview_text = title.get_text(strip=True) if title else "(제목 없음)"
+                            st.markdown(f"**📝 제목:** {preview_text}")
+                            first_p = preview_soup.find("p")
+                            if first_p:
+                                st.text(f"본문 예시: {first_p.get_text(strip=True)}")
+                        except Exception as e:
+                            st.error(f"❌ 미리보기 오류: {e}")
 
     except Exception as e:
-        st.error(f"❌ 오류 발생: {e}")
+        st.error(f"❌ 요청 또는 파싱 중 오류 발생: {e}")
