@@ -94,7 +94,7 @@ if url and tag and st.button("파싱 시작"):
                     a_text = span.get_text(strip=True) if span else a.get_text(strip=True)
                     if not a_text:
                         a_text = "(링크 텍스트 없음)"
-                    st.text(f"🔗 링크: {a_text} ({urljoin(url, href)})")
+                    st.text(f"🔗 링크: {a_text}<br> ({urljoin(url, href)})")
 
     except Exception as e:
         st.error(f"❌ 오류 발생: {e}")
