@@ -2,74 +2,79 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-import pandas as pd
 
-st.set_page_config(page_title="웹 파서 개선판", layout="wide")
-st.title("🔍 웹 파서 with 표 분석")
+st.set_page_config(page_title="웹 구조 분석기", layout="wide")
+st.title("🧩 HTML 구조 파서 (테이블, 이미지, 링크 자동 분석)")
 
-# 도움말
-with st.expander("📘 태그를 어떻게 찾나요?"):
-    st.markdown("""
-    - 크롬에서 F12 누르거나, 오른쪽 클릭 > **검사**를 선택하세요.
-    - 마우스로 원하는 부분을 클릭하면 HTML 태그가 보입니다.
-    - 예: `<table class="info">`, `<div id="main">` 등을 확인해 입력하세요.
-    - `table`, `div`, `img`, `a` 같은 태그를 많이 사용합니다.
-    """)
+url = st.text_input("🔗 분석할 웹페이지 URL을 입력하세요:")
 
-# 입력
-url = st.text_input("🔗 사이트 주소")
-tag = st.text_input("🔖 HTML 태그 (예: table, div, p 등)")
-attr = st.text_input("🎯 속성 필터 (선택, 예: class=info 또는 id=main)")
-
-if st.button("파싱 시작") and url and tag:
+if url:
     try:
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # 속성 필터
-        if "=" in attr:
-            key, val = attr.split("=")
-            elements = soup.find_all(tag, {key.strip(): val.strip()})
-        else:
-            elements = soup.find_all(tag)
+        # 자동 태그 종류 추천
+        tag_options = ['table', 'img', 'div', 'a', 'p', 'ul']
+        tag = st.selectbox("🔖 분석할 HTML 태그 선택", tag_options)
 
-        if not elements:
-            st.warning("해당 태그를 가진 요소가 없습니다.")
-        else:
-            st.success(f"🔍 {len(elements)}개의 `{tag}` 요소를 찾았습니다.")
+        elements = soup.find_all(tag)
+        st.success(f"총 {len(elements)}개의 `{tag}` 태그가 감지되었습니다.")
 
-            for i, el in enumerate(elements):
-                st.markdown(f"---\n### ▶️ 요소 {i+1}")
+        for idx, el in enumerate(elements):
+            st.markdown(f"---\n### ▶️ {tag} 요소 {idx + 1}")
 
-                # table 태그의 경우: 각 tr, td 분석
-                if tag == "table":
-                    rows = el.find_all("tr")
-                    data = []
-                    for row in rows:
-                        cols = row.find_all(["td", "th"])
-                        data.append([col.get_text(strip=True) for col in cols])
-                    df = pd.DataFrame(data)
-                    st.table(df)
+            if tag == 'table':
+                rows = el.find_all('tr')
+                for row_idx, row in enumerate(rows):
+                    cols = row.find_all(['td', 'th'])
+                    st.markdown(f"**Row {row_idx + 1}**:")
+                    for col_idx, col in enumerate(cols):
+                        content = col.get_text(strip=True)
+                        images = col.find_all('img')
+                        links = col.find_all('a')
 
-                # 이미지 출력
-                elif el.find("img"):
-                    for img in el.find_all("img"):
-                        src = img.get("src")
-                        if src:
-                            full_url = urljoin(url, src)
-                            st.image(full_url)
+                        if images:
+                            for img in images:
+                                src = urljoin(url, img.get("src", ""))
+                                st.markdown(f"🖼️ 이미지: `{src}`")
+                        elif links:
+                            for a in links:
+                                href = urljoin(url, a.get("href", ""))
+                                st.markdown(f"🔗 링크 (URL): `{href}`")
+                        elif content:
+                            st.markdown(f"📝 텍스트 {col_idx + 1}: `{content}`")
+                        else:
+                            st.markdown(f"❗ 빈 셀 {col_idx + 1}")
 
-                # 링크: 텍스트로만 표시
-                elif el.find("a"):
-                    links = [a.get("href") for a in el.find_all("a") if a.get("href")]
-                    for l in links:
-                        st.text(urljoin(url, l))
+            elif tag == 'img':
+                src = el.get("src")
+                if src:
+                    img_url = urljoin(url, src)
+                    st.image(img_url, caption=img_url)
 
-                # 일반 텍스트
-                else:
-                    text = el.get_text(strip=True)
-                    st.text(text if text else "(빈 텍스트)")
+            elif tag == 'a':
+                href = el.get("href")
+                text = el.get_text(strip=True)
+                if href:
+                    full_url = urljoin(url, href)
+                    st.markdown(f"🔗 URL: `{full_url}` / 📝 텍스트: `{text}`")
+
+            elif tag in ['div', 'p', 'ul']:
+                text = el.get_text(strip=True)
+                images = el.find_all('img')
+                links = el.find_all('a')
+
+                if images:
+                    for img in images:
+                        src = urljoin(url, img.get("src", ""))
+                        st.markdown(f"🖼️ 포함 이미지: `{src}`")
+                if links:
+                    for a in links:
+                        href = urljoin(url, a.get("href", ""))
+                        st.markdown(f"🔗 포함 링크: `{href}`")
+                if text:
+                    st.markdown(f"📝 텍스트: `{text}`")
 
     except Exception as e:
         st.error(f"❌ 오류 발생: {e}")
