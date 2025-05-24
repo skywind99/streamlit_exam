@@ -3,98 +3,75 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import pandas as pd
+import re
 
-st.set_page_config(page_title="웹 구조 파서", layout="wide")
-st.title("🧩 HTML 구조 파서 with 표 + 링크 + 이미지 분석")
+st.set_page_config(page_title="링크 분석기", layout="wide")
+st.title("🔗 링크 추출 + 미리보기")
 
-# 입력
-url = st.text_input("🔗 분석할 웹페이지 URL을 입력하세요:")
-tag_options = ['table', 'img', 'a', 'div', 'p']
-tag = st.selectbox("🔖 분석할 HTML 태그 선택", tag_options)
+url = st.text_input("📥 분석할 웹페이지 주소:")
+tag = st.selectbox("🔖 분석할 태그 선택", ['a'])
 
-if url and tag and st.button("파싱 시작"):
+# 링크 템플릿
+LINK_TEMPLATE = (
+    "https://www.seti.go.kr/common/bbs/management/selectCmmnBBSMgmtView.do"
+    "?menuId=1000002747&pageIndex=1&bbscttId={}&bbsId=BBSMSTR_000000001070"
+    "&searchKey=&searchWord=&etc=&searchKeyTxt=1&searchWordTxt=&perPage=10"
+)
+
+if url and st.button("🔍 파싱 시작"):
     try:
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
-        elements = soup.find_all(tag)
-        st.success(f"🔎 {len(elements)}개의 `{tag}` 태그가 감지되었습니다.")
+        a_tags = soup.find_all("a")
+        st.success(f"🔗 a 태그 {len(a_tags)}개 발견")
 
-        for idx, el in enumerate(elements):
-            st.markdown(f"---\n### ▶️ {tag} 요소 {idx + 1}")
+        for idx, a in enumerate(a_tags):
+            href = a.get("href", "")
+            span = a.find("span")
+            text = span.get_text(strip=True) if span else a.get_text(strip=True)
+            if not text:
+                text = "(텍스트 없음)"
 
-            # ✅ TABLE 분석
-            if tag == "table":
-                rows = el.find_all("tr")
-                data = []
-                max_cols = 0
-
-                for row in rows:
-                    cols = row.find_all(["td", "th"])
-                    row_data = []
-                    for col in cols:
-                        # a 태그 + span 처리
-                        if a := col.find("a"):
-                            href = a.get("href", "").strip()
-                            span = a.find("span")
-                            text = span.get_text(strip=True) if span else a.get_text(strip=True)
-                            if href:
-                                content = f"{text} ({urljoin(url, href)})" if text else f"(링크: {urljoin(url, href)})"
-                            else:
-                                content = text
-                        else:
-                            # 일반 텍스트
-                            content = col.get_text(strip=True)
-                        row_data.append(content)
-                    max_cols = max(max_cols, len(row_data))
-                    data.append(row_data)
-
-                # 열 정렬
-                for row in data:
-                    while len(row) < max_cols:
-                        row.append("")
-
-                df = pd.DataFrame(data)
-                st.table(df)
-
-            # ✅ IMG 분석
-            elif tag == "img":
-                src = el.get("src")
-                if src:
-                    full_src = urljoin(url, src)
-                    st.image(full_src, caption=full_src)
-
-            # ✅ A 분석
-            elif tag == "a":
-                href = el.get("href", "")
-                span = el.find("span")
-                text = span.get_text(strip=True) if span else el.get_text(strip=True)
-                if not text:
-                    text = "(텍스트 없음)"
-                full_url = urljoin(url, href)
-                st.text(f"📝 텍스트: {text}")
-                st.text(f"🔗 URL: {full_url}")
-
-            # ✅ 기타 (div, p 등)
+            # 숫자 10자리 추출
+            match = re.search(r"\d{10}", href)
+            if match:
+                bbsctt_id = match.group()
+                converted_url = LINK_TEMPLATE.format(bbsctt_id)
             else:
-                text = el.get_text(strip=True)
-                if text:
-                    st.text(f"📝 텍스트: {text}")
+                converted_url = None
 
-                imgs = el.find_all("img")
-                for img in imgs:
-                    src = img.get("src", "")
-                    st.text(f"🖼️ 이미지 URL: {urljoin(url, src)}")
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.markdown(f"**{text}**")
+                if converted_url:
+                    st.text(f"{converted_url}")
+                    if st.button(f"🔎 링크 확인 {idx+1}", key=f"preview_{idx}"):
+                        st.session_state[f"preview_link_{idx}"] = converted_url
+                else:
+                    st.warning("❌ 숫자 10자리(bbscttId) 없음")
 
-                links = el.find_all("a")
-                for a in links:
-                    href = a.get("href", "")
-                    span = a.find("span")
-                    a_text = span.get_text(strip=True) if span else a.get_text(strip=True)
-                    if not a_text:
-                        a_text = "(링크 텍스트 없음)"
-                    st.text(f"🔗 링크: {a_text} ({urljoin(url, href)})")
+            with col2:
+                if f"preview_link_{idx}" in st.session_state:
+                    preview_url = st.session_state[f"preview_link_{idx}"]
+                    st.info(f"🔗 미리보기: {preview_url}")
+                    try:
+                        preview_resp = requests.get(preview_url)
+                        preview_resp.raise_for_status()
+                        preview_soup = BeautifulSoup(preview_resp.text, "html.parser")
+
+                        # 예시: 페이지의 제목을 표시
+                        title_tag = preview_soup.find("h1") or preview_soup.find("title")
+                        preview_text = title_tag.get_text(strip=True) if title_tag else "(제목 없음)"
+                        st.markdown(f"**📝 페이지 제목:** {preview_text}")
+
+                        # 일부 텍스트 내용 예시 표시
+                        first_p = preview_soup.find("p")
+                        if first_p:
+                            st.text(f"본문 예시: {first_p.get_text(strip=True)}")
+                    except Exception as e:
+                        st.error(f"❌ 미리보기 불가: {e}")
 
     except Exception as e:
         st.error(f"❌ 오류 발생: {e}")
