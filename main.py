@@ -35,22 +35,28 @@ if st.button("오늘의 단어"):
     st.session_state.current_index = 0  # 처음 단어부터 시작
 
 if 'random_words' in st.session_state:
-    word = st.session_state.random_words[st.session_state.current_index]
+    # current_index가 random_words의 길이를 초과하지 않도록 보호
+    current_index = st.session_state.current_index
+    random_words = st.session_state.random_words
+    if current_index < len(random_words):
+        word = random_words[current_index]
+        
+        # 뜻 보기
+        if st.button("뜻 보기"):
+            st.session_state.show_meaning = True
+            st.write(f"뜻: {word['meaning']}")
 
-    # 뜻 보기
-    if st.button("뜻 보기"):
-        st.session_state.show_meaning = True
-        st.write(f"뜻: {word['meaning']}")
+        # 단어 보기
+        if st.button("단어 보기"):
+            st.session_state.show_meaning = False
+            st.write(f"단어: {word['word']}")
 
-    # 단어 보기
-    if st.button("단어 보기"):
-        st.session_state.show_meaning = False
-        st.write(f"단어: {word['word']}")
-
-    # '다음' 버튼으로 다음 단어로 넘어가기
-    if st.button("다음"):
-        if st.session_state.current_index < len(st.session_state.random_words) - 1:
-            st.session_state.current_index += 1
-            st.session_state.show_meaning = False  # 단어가 보이게 초기화
-        else:
-            st.write("단어 학습이 끝났습니다.")
+        # '다음' 버튼으로 다음 단어로 넘어가기
+        if st.button("다음"):
+            if current_index < len(random_words) - 1:
+                st.session_state.current_index += 1  # 다음 단어로 인덱스 증가
+                st.session_state.show_meaning = False  # 단어가 보이게 초기화
+            else:
+                st.write("단어 학습이 끝났습니다.")
+    else:
+        st.write("목록에 더 이상 단어가 없습니다.")
