@@ -20,8 +20,9 @@ def extract_words_from_pdf(pdf_path: str):
 pdf_path = 'pdf_files/english.pdf'  # 'pdf_files' 폴더에 'english.pdf' 파일이 있다고 가정
 words = extract_words_from_pdf(pdf_path)
 
-# 랜덤으로 단어 10개 추출
+# 랜덤으로 단어 10개 추출 (단, 리스트 크기보다 큰 수를 요구할 수 없게 수정)
 def get_random_words(words, num=10):
+    num = min(num, len(words))  # num이 words의 크기보다 크면 조정
     return random.sample(words, num)
 
 # Streamlit 앱 UI
